@@ -48,7 +48,7 @@ class ManualFeatures(TransformerMixin, BaseEstimator):
     """
 
 
-    def __init__(self, spacy_model, batch_size = 64, pos_features = True, ner_features = True, text_descriptive_features = True):
+    def __init__(self, spacy_model, batch_size = 64, pos_features = True, ner_features = True, text_descriptive_features = True, spell_check=True):
 
         self.spacy_model = spacy_model
         self.batch_size = batch_size
@@ -114,6 +114,18 @@ class ManualFeatures(TransformerMixin, BaseEstimator):
 
         # Convert the list of NER counts to a 2D numpy array
         return np.array(count_ner).reshape(-1, 1)
+
+    def get_spelling_error_features(self, cleaned_text):
+        if self.spell_check:
+            error_counts = []
+            for text in cleaned_text:
+            # Spell check the text and count the number of misspelled words
+                corrected_text = self.spell_check_text(text)
+                misspelled = self.spell_checker.unknown(corrected_text)
+                error_counts.append(len(misspelled))
+            return np.array(error_counts).reshape(-1, 1)
+        else:
+            return np.zeros((len(cleaned_text), 1))  # Return zeros if spell check is disabled
 
     def spell_check_text(self, text):
         if self.spell_check:
