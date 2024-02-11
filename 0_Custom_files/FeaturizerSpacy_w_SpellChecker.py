@@ -210,7 +210,7 @@ class ManualFeatures(TransformerMixin, BaseEstimator):
                 ner_features = np.empty(shape=(0, 0))
 
             # Stack the feature arrays horizontally to form a single 2D numpy array
-            return np.hstack((text_descriptive_features, pos_features,  ner_features)), feature_names
+            return np.hstack((text_descriptive_features, pos_features,  ner_features, spelling_error_features)), feature_names
 
         except Exception as error:
             print(f'An exception occured: {repr(error)}')
