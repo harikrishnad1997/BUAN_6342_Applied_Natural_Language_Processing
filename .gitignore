@@ -6,3 +6,4 @@ Class - 1/.DS_Store
 *.pyc
 *.pkl
 *.csv
+*.pt
