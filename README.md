@@ -1,4 +1,4 @@
-# BUAN 6382.S01: Applied Natural Language Processing
+# BUAN 6342.S01: Applied Natural Language Processing
 
 ## Instructor: Harpreet Singh
 
