@@ -7,3 +7,11 @@ Class - 1/.DS_Store
 *.pkl
 *.csv
 *.pt
+*.zip
+*.log
+/HW/wandb
+*.json
+*.safetensors
+*.pth
+*.bin
+*.csv
