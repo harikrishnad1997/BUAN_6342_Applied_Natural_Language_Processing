@@ -1,8 +1,6 @@
 .conda/
 .DS_Store
 .vscode/settings.json
-Class - 1/.DS_Store
-Class - 1/.DS_Store
 *.pyc
 *.pkl
 *.csv
@@ -15,3 +13,4 @@ Class - 1/.DS_Store
 *.pth
 *.bin
 *.csv
+/HW/Harikrishna_Dev_HW5_files
