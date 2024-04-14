@@ -5,6 +5,7 @@ import torch
 from transformers import EvalPrediction
 import optuna
 from datetime import date
+from sklearn.metrics import multilabel_confusion_matrix
 
 class MultiLabelClassifier:
     def __init__(self, model_name, labels, batch_size=8, learning_rate=2e-5, num_epochs=5, metric_name="f1", threshold=0.5):
@@ -35,7 +36,7 @@ class MultiLabelClassifier:
         self.model = AutoModelForSequenceClassification.from_pretrained(model_name, problem_type="multi_label_classification", num_labels=len(labels), id2label={str(i): label for i, label in enumerate(labels)}, label2id={label: i for i, label in enumerate(labels)})
         self.id2label = {str(i): label for i, label in enumerate(labels)}
         self.label2id = {label: i for i, label in enumerate(labels)}
-        self.model.to(self.device) 
+        self.model.to(self.device)
 
     def preprocess_data(self, examples):
         """
@@ -80,6 +81,27 @@ class MultiLabelClassifier:
         accuracy = accuracy_score(y_true, y_pred)
         metrics = {'f1': f1_micro_average, 'roc_auc': roc_auc, 'accuracy': accuracy}
         return metrics
+
+    def multilabel_confusion_matrix(self, predictions, labels, threshold=None):
+        """
+        Computes multilabel confusion matrix.
+
+        Args:
+        - predictions (torch.Tensor): Model predictions.
+        - labels (np.ndarray): Ground truth labels.
+        - threshold (float): Threshold for binary classification.
+
+        Returns:
+        - np.ndarray: Multilabel confusion matrix.
+        """
+        if threshold is None:
+            threshold = self.threshold
+        sigmoid = torch.nn.Sigmoid()
+        probs = sigmoid(torch.Tensor(predictions))
+        y_pred = np.zeros(probs.shape)
+        y_pred[np.where(probs >= threshold)] = 1
+        y_true = labels
+        return multilabel_confusion_matrix(y_true, y_pred)
 
     def compute_metrics(self, p: EvalPrediction):
         """
@@ -148,7 +170,25 @@ class MultiLabelClassifier:
         )
 
         trainer.train()
-        trainer.evaluate()
+        eval_results = trainer.evaluate()
+        print(f"Evaluation results: {eval_results}")
+
+        # Log evaluation results to Weights & Biases platform
+        wandb.log({"eval_accuracy": eval_results["eval_accuracy"], "eval_loss": eval_results["eval_loss"], "eval_f1": eval_results["eval_f1"]})
+
+        # # Compute and plot confusion matrix
+        # preds = trainer.predict(valid_dataset)
+        # y_labels = valid_dataset[self.labels]
+        # confusion_matrix = self.multilabel_confusion_matrix(preds, y_labels)
+        # plt.figure(figsize=(10, 7))
+        # sns.heatmap(confusion_matrix, annot=True, cmap="Blues")
+        # plt.xlabel("Predicted Labels")
+        # plt.ylabel("True Labels")
+        # plt.title("Multilabel Confusion Matrix")
+        # plt.show()
+
+        # # Log confusion matrix to Weights & Biases platform
+        # wandb.log({"confusion_matrix": wandb.Image(plt)})
 
     def predict(self, texts, threshold=0.5):
         """
@@ -217,10 +257,10 @@ class MultiLabelClassifier:
             f1_micro_average = f1_score(y_true=labels, y_pred=binary_preds, average='micro')
             roc_auc = roc_auc_score(labels, predictions, average='micro')
             accuracy = accuracy_score(labels, binary_preds)
-          
+
             result = {'f1': f1_micro_average, 'roc_auc': roc_auc, 'accuracy': accuracy}
             return -result["f1"]
-          
+
     def optimize_threshold(self, valid_dataset):
         """
         Optimizes the threshold for binary classification.
