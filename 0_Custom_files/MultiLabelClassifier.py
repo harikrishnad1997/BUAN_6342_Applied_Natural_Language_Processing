@@ -117,7 +117,7 @@ class MultiLabelClassifier:
         result = self.multi_label_metrics(predictions=preds, labels=p.label_ids)
         return result
 
-    def train(self, train_dataset, valid_dataset):
+    def train(self, train_dataset, valid_dataset, push_to_huggingface=True):
         """
         Trains the model.
 
@@ -173,6 +173,13 @@ class MultiLabelClassifier:
         eval_results = trainer.evaluate()
         print(f"Evaluation results: {eval_results}")
 
+        # Pushing model to Huggingface
+        if push_to_huggingface:
+          model_name_hf = f"emotion_tweet_{self.model_name}_{date.today().strftime('%Y-%m-%d')}"
+          self.model.push_to_hub(model_name_hf)
+          print(f"Model pushed to Huggingface: harikrishnad1997/{model_name_hf}")
+
+
         # Log evaluation results to Weights & Biases platform
         wandb.log({"eval_accuracy": eval_results["eval_accuracy"], "eval_loss": eval_results["eval_loss"], "eval_f1": eval_results["eval_f1"]})
 
@@ -190,7 +197,7 @@ class MultiLabelClassifier:
         # # Log confusion matrix to Weights & Biases platform
         # wandb.log({"confusion_matrix": wandb.Image(plt)})
 
-    def predict(self, texts, threshold=0.5):
+    def predict(self, texts, threshold=0.5, load_from_huggingface=False):
         """
         Generates predictions for a list of texts.
 
@@ -204,8 +211,18 @@ class MultiLabelClassifier:
         if threshold is None:
             threshold = self.threshold
 
+        # Load the model from Hugging Face if specified
+        if load_from_huggingface:
+          self.model = AutoModelForSequenceClassification.from_pretrained(load_from_huggingface)
+          # self.tokenizer = AutoTokenizer.from_pretrained(load_from_huggingface)
+          self.model.to("cpu")
+        else:
+          # Use the model from training
+          self.model.to("cpu")
+
+
         # Preprocess input texts
-        encoding = self.tokenizer(texts, padding="max_length", truncation=True, max_length=128, return_tensors="pt").to(self.device)
+        encoding = self.tokenizer(texts, padding="max_length", truncation=True, max_length=128, return_tensors="pt").to("cpu")
 
         # Make predictions
         with torch.no_grad():
@@ -216,7 +233,7 @@ class MultiLabelClassifier:
         probs = sigmoid(output.logits)
 
         # Apply threshold for binary classification
-        threshold_tensor = torch.tensor([threshold], device=self.device)
+        threshold_tensor = torch.tensor([threshold], device="cpu")
         binary_preds = (probs >= threshold_tensor).int()
 
         # Convert binary predictions to label names
@@ -245,9 +262,12 @@ class MultiLabelClassifier:
         # Get the correct labels from the dataset
         labels = np.array([valid_dataset[column] for column in self.labels]).T
 
+        # Model to cpu
+        self.model.to("cpu")
+
         # Make predictions
         with torch.no_grad():
-            logits = self.model(valid_dataset["input_ids"].to(torch.device("cuda")))['logits']
+            logits = self.model(valid_dataset["input_ids"].to(torch.device("cpu")))['logits']
             predictions = torch.sigmoid(logits).cpu().numpy()
 
             # Apply threshold for binary classification
