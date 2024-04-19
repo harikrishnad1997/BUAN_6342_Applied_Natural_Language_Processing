@@ -6,9 +6,10 @@ from transformers import EvalPrediction
 import optuna
 from datetime import date
 from sklearn.metrics import multilabel_confusion_matrix
+from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training
 
 class MultiLabelClassifier:
-    def __init__(self, model_name, labels, batch_size=8, learning_rate=2e-5, num_epochs=5, metric_name="f1", threshold=0.5):
+    def __init__(self, model_name, labels, batch_size=8, learning_rate=2e-5, num_epochs=5, metric_name="f1", threshold=0.5,peft_config=None):
         """
         Initializes the MultiLabelClassifier.
 
@@ -37,6 +38,24 @@ class MultiLabelClassifier:
         self.id2label = {str(i): label for i, label in enumerate(labels)}
         self.label2id = {label: i for i, label in enumerate(labels)}
         self.model.to(self.device)
+        
+        # Initialize PEFT
+        if lora_config is None:
+            self.peft_config = LoraConfig(
+                task_type="SEQUENCE_CLASSIFICATION",
+                inference_mode=False,
+                r=8,
+                lora_alpha=16,
+                lora_dropout=0.1,
+                target_modules=["linear_q", "linear_k", "linear_v", "linear_out"],
+                bias="none",
+                modules_to_save=["model.classifier"],
+            )
+        else:
+            self.peft_config = lora_config
+            
+        self.model = prepare_model_for_int8_training(self.model)
+        self.model = get_peft_model(self.model, self.peft_config)
 
     def preprocess_data(self, examples):
         """
@@ -150,7 +169,9 @@ class MultiLabelClassifier:
             logging_strategy='steps',  # Log metrics and results to Weights & Biases platform
             logging_steps=50,  # Log metrics and results every 50 steps
             report_to='wandb',  # Log metrics and results to Weights & Biases platform
-            run_name=f"emotion_tweet_{self.model_name}_{date.today().strftime('%Y-%m-%d')}",  # Experiment name for Weights & Biases
+            gradient_accumulation_steps=10,  # Accumulate gradients for every 1 step
+            gradient_checkpointing=True,  # Enable gradient checkpointing
+            run_name=f"emotion_tweet_{self.model_name}_{date.today().strftime('%Y-%m-%d_%H-%M-%S')}",  # Experiment name for Weights & Biases
             fp16=True  # Use mixed precision training (FP16)
             )
 
@@ -262,7 +283,7 @@ class MultiLabelClassifier:
         # Get the correct labels from the dataset
         labels = np.array([valid_dataset[column] for column in self.labels]).T
 
-        # Model to cpu
+        # Model
         self.model.to("cpu")
 
         # Make predictions
