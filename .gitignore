@@ -14,3 +14,7 @@
 *.bin
 *.csv
 /HW/Harikrishna_Dev_HW5_files
+models/emotions_mistral_qlora_im/checkpoint-60/README.md
+models/emotions_mistral_qlora_im/checkpoint-60/tokenizer.model
+models/emotions_mistral_qlora_im/checkpoint-80/README.md
+models/emotions_mistral_qlora_im/checkpoint-80/tokenizer.model
