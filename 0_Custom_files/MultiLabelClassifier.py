@@ -9,7 +9,7 @@ from sklearn.metrics import multilabel_confusion_matrix
 from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training
 
 class MultiLabelClassifier:
-    def __init__(self, model_name, labels, batch_size=8, learning_rate=2e-5, num_epochs=5, metric_name="f1", threshold=0.5,peft_config=None):
+    def __init__(self, model_name, labels, batch_size=8, learning_rate=2e-5, num_epochs=5, metric_name="f1", threshold=0.5,peft_config=None, bnb_config=None):
         """
         Initializes the MultiLabelClassifier.
 
@@ -21,6 +21,8 @@ class MultiLabelClassifier:
         - num_epochs (int): Number of epochs for training.
         - metric_name (str): The name of the evaluation metric.
         - threshold (float): Threshold for binary classification.
+        - peft_config (Optional): Configuration for PEFT (Precision Efficient Finetuning).
+        - bnb_config (Optional): Configuration for BitsAndBytes.
 
         Returns:
         - None
@@ -34,7 +36,19 @@ class MultiLabelClassifier:
         self.metric_name = metric_name
         self.threshold = threshold
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name, problem_type="multi_label_classification", num_labels=len(labels), id2label={str(i): label for i, label in enumerate(labels)}, label2id={label: i for i, label in enumerate(labels)})
+        if bnb_config is None:
+            self.bnb_config = BitsAndBytesConfig(
+                            load_in_4bit=True,
+                            llm_int8_skip_modules = ['out_proj', 'dense'],
+                            bnb_4bit_quant_type="nf4",
+                            bnb_4bit_use_double_quant=True,
+                            bnb_4bit_compute_dtype=torch.bfloat16
+                        )
+        else:
+            self.bnb_config = bnb_config
+        self.model = AutoModelForSequenceClassification.from_pretrained(model_name, problem_type="multi_label_classification", num_labels=len(labels), 
+                                                                        id2label={str(i): label for i, label in enumerate(labels)},
+                                                                        quantization_config=bnb_config, label2id={label: i for i, label in enumerate(labels)})
         self.id2label = {str(i): label for i, label in enumerate(labels)}
         self.label2id = {label: i for i, label in enumerate(labels)}
         self.model.to(self.device)
@@ -96,9 +110,10 @@ class MultiLabelClassifier:
         y_pred[np.where(probs >= threshold)] = 1
         y_true = labels
         f1_micro_average = f1_score(y_true=y_true, y_pred=y_pred, average='micro')
+        f1_macro_average = f1_score(y_true=y_true, y_pred=y_pred, average='macro')
         roc_auc = roc_auc_score(y_true, y_pred, average='micro')
         accuracy = accuracy_score(y_true, y_pred)
-        metrics = {'f1': f1_micro_average, 'roc_auc': roc_auc, 'accuracy': accuracy}
+        metrics = {'f1_micro': f1_micro_average,'f1_macro': f1_macro_average, 'roc_auc': roc_auc, 'accuracy': accuracy}
         return metrics
 
     def multilabel_confusion_matrix(self, predictions, labels, threshold=None):
@@ -157,7 +172,7 @@ class MultiLabelClassifier:
             num_train_epochs=self.num_epochs,
             weight_decay=0.01,
             load_best_model_at_end=True,
-            metric_for_best_model="f1",  # Use F1 score as the metric to determine the best model
+            metric_for_best_model="f1_micro",  # Use F1 score as the metric to determine the best model
             optim='adamw_torch',  # Optimizer
             # output_dir=str(model_folder),  # Directory to save model checkpoints
             evaluation_strategy='steps',  # Evaluate model at specified step intervals
@@ -171,7 +186,7 @@ class MultiLabelClassifier:
             report_to='wandb',  # Log metrics and results to Weights & Biases platform
             gradient_accumulation_steps=10,  # Accumulate gradients for every 1 step
             gradient_checkpointing=True,  # Enable gradient checkpointing
-            run_name=f"emotion_tweet_{self.model_name}_{date.today().strftime('%Y-%m-%d_%H-%M-%S')}",  # Experiment name for Weights & Biases
+            run_name=f"emotion_tweet_{self.model_name}_{date.today().strftime('%Y_%m_%d_%H_%M_%S')}",  # Experiment name for Weights & Biases
             fp16=True  # Use mixed precision training (FP16)
             )
 
